@@ -17,22 +17,9 @@ int sendString(int sockfd, const std::string & str) {
 }
 
 int recvLine(int sockfd, std::string & result) {
-
-    bool r = 0;
-    bool n = 0;
     char c = 0;
     while(recv(sockfd, &c, 1, 0) == 1) {
-        if (c == '\r') {
-            r = 1;
-        } else
-        if (c == '\n') {
-            n = 1;
-        } else {
-            r = n = 0;
-        }
-
-        if (r && n) {
-            result = result.substr(0, result.size() - 1);
+        if (c == '\r' || c == '\n') {
             return 0;
         }
 
