@@ -20,18 +20,25 @@ int cleanupLogger() {
 
 int logMessage(const char * format, ...) {
     va_list valist;
-    time_t rawtime;
-    struct tm * timeinfo;
 
-    time ( &rawtime );
-    timeinfo = localtime ( &rawtime );
-    fprintf(logFileFd, "[%s] ", (char*) timeinfo);
-    fprintf(logFileFd, format, valist);
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%d-%m-%Y %H-%M-%S");
+    std::string time = oss.str();
+
+    fprintf(logFileFd, "[%s] ", time.c_str());
+    va_start(valist, format);
+    vfprintf(logFileFd, format, valist);
+    va_end(valist);
     fprintf(logFileFd, "\n");
     fflush(logFileFd);
 
-    printf( "[%s] ", (char*) timeinfo);
-    printf( format, valist);
+    printf( "[%s] ", time.c_str());
+    va_start(valist, format);
+    vprintf( format, valist);
+    va_end(valist);
     printf( "\n");
     fflush(stdout);
 }

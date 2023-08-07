@@ -5,9 +5,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
-#include <time.h>
-#include <signal.h>
-
+#include <iomanip>
+#include <ctime>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,14 +21,18 @@
 const int PORT = 80;
 const std::string WEBROOT = "./../webroot";
 
+// LOGGER
 int initLogger();
 int cleanupLogger();
 int logMessage(const char * format, ...);
 
+// SERVER
 int initServer();
 int loopServer(int socket);
 int shutdownServer(int socket);
 
+// HTTP
 int handleConnection(int sockfd, struct sockaddr_in *client_addr_ptr);
 
+// UTILS
 int getFileSize(int fd);

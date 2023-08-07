@@ -1,5 +1,5 @@
 #include "server.hpp"
-/*
+
 int sendString(int sockfd, const std::string & str) {
     int sentBytes = 0;
     int bytesToSend = str.length();
@@ -51,10 +51,13 @@ int handleConnection(int sockfd, struct sockaddr_in *client_addr_ptr) {
         return -errno;
     }
 
-    logMessage("From %s:%d [%s]", inet_ntoa(client_addr_ptr->sin_addr), ntohs(client_addr_ptr->sin_port), request);
+    auto ip = inet_ntoa(client_addr_ptr->sin_addr);
+    auto port = ntohs(client_addr_ptr->sin_port);
+    logMessage("From %s:%d [%s]", ip, port, request.c_str());
 
-    // HTTP
-    int headerPos = request.find(" HTTP/");
+    // remove HTTP
+    const std::string httpMes = " HTTP/";
+    int headerPos = request.find(httpMes);
     if (headerPos == std::string::npos) {
         logMessage("NOT HTTP");
         shutdown(sockfd, SHUT_RDWR);
@@ -62,37 +65,55 @@ int handleConnection(int sockfd, struct sockaddr_in *client_addr_ptr) {
     }
     request = request.substr(0, headerPos);
 
-    // GET
-    int getPos = request.find("GET ");
+    // extract url from GET and POST
+    const std::string getMes = "GET ";
+    const std::string headMes = "HEAD ";
 
+    int getPos = request.find(getMes);
+    int headPos = request.find(headMes);
 
-    // HEAD
-    int headPos = request.find("HEAD ");
+    bool isGet = getPos != std::string::npos;
+    bool isHead = headPos != std::string::npos;
 
+    int urlPos = 0;
 
-    // EMPTY
-    if (request.empty()) {
-        logMessage("empty");
+    if (isGet) {
+        logMessage("get request");
+        urlPos = getPos + getMes.size();
+    }
+    if (isHead) {
+        logMessage("head request");
+        urlPos = headPos + headMes.size();
+    }
+
+    std::string url = request.substr(urlPos, request.size() - urlPos);
+
+    if (url.empty()) {
+        logMessage("empty url");
         shutdown(sockfd, SHUT_RDWR);
         return 0;
     }
 
-    // INDEX.HTML
-    if (request.back() == '/') {
-        request += "index.html";
-    }
+    logMessage("received url [%s]", url.c_str());
 
-    // OPEN RESOURCE
-    std::string resource = WEBROOT + request;
+    // preparing resource path
+    std::string resource = url;
+    // INDEX.HTML
+    if (resource.back() == '/') {
+        resource += "index.html";
+    }
+    resource = WEBROOT + resource;
+
+    // open resource
     int fd = open(resource.c_str(), O_RDONLY, 0);
-    if(fd == -1) { // if file is not found
-        logMessage(" 404 Not Found");
+    if(fd == -1) {
+        logMessage("404 Not Found");
         sendString(sockfd, "HTTP/1.0 404 NOT FOUND\r\n");
         sendString(sockfd, "Server: Tiny webserver\r\n\r\n");
         sendString(sockfd, "<html><head><title>404 Not Found</title></head>");
         sendString(sockfd, "<body><h1>gggURL not found</h1></body></html>\r\n");
     } else {
-        logMessage("Sending file [%s]\n", resource);
+        logMessage("Sending file [%s]\n", resource.c_str());
         sendString(sockfd, "HTTP/1.0 200 OK\r\n");
         sendString(sockfd, "Server: Tiny webserver\r\n\r\n");
 
@@ -104,8 +125,8 @@ int handleConnection(int sockfd, struct sockaddr_in *client_addr_ptr) {
         }
 
         char * ptr = (char *) calloc(length, 1);
-        if(ptr == NULL) {
-            logMessage("allocating memory for reading resource");
+        if (ptr == NULL) {
+            REPORT_ERROR("allocating memory for reading resource");
             shutdown(sockfd, SHUT_RDWR);
             return -errno;
         }
@@ -118,105 +139,4 @@ int handleConnection(int sockfd, struct sockaddr_in *client_addr_ptr) {
 
     shutdown(sockfd, SHUT_RDWR);
     return 0;
-}*/
-/*
-int send_string(int sockfd, char *buffer) {
-    int sent_bytes, bytes_to_send;
-    bytes_to_send = strlen(buffer);
-    while(bytes_to_send > 0) {
-        sent_bytes = send(sockfd, buffer, bytes_to_send, 0);
-        if(sent_bytes == -1)
-            return 0; // return 0 on send error
-        bytes_to_send -= sent_bytes;
-        buffer += sent_bytes;
-    }
-    return 1; // return 1 on success
 }
-
-int recv_line(int sockfd, char *dest_buffer) {
-#define EOL "\r\n" // End-Of-Line byte sequence
-#define EOL_SIZE 2
-    char *ptr;
-    int eol_matched = 0;
-
-    ptr = dest_buffer;
-    while(recv(sockfd, ptr, 1, 0) == 1) { // read a single byte
-        if(*ptr == EOL[eol_matched]) { // does this byte match terminator
-            eol_matched++;
-            if(eol_matched == EOL_SIZE) { // if all bytes match terminator,
-                *(ptr+1-EOL_SIZE) = '\0'; // terminate the string
-                return strlen(dest_buffer); // return bytes recevied
-            }
-        } else {
-            eol_matched = 0;
-        }
-        ptr++; // increment the pointer to the next byter;
-    }
-    return 0; // didn't find the end of line characters
-}
-
-
-int get_file_size(int fd) {
-    struct stat stat_struct;
-
-    if(fstat(fd, &stat_struct) == -1)
-        return -1;
-    return (int) stat_struct.st_size;
-}
-
-int handleConnection(int sockfd, struct sockaddr_in *client_addr_ptr) {
-    char *ptr, request[500], resource[500];
-    int fd, length;
-
-    length = recv_line(sockfd, request);
-
-    printf("Got request from %s:%d \"%s\"\n", inet_ntoa(client_addr_ptr->sin_addr), ntohs(client_addr_ptr->sin_port), request);
-
-    ptr = strstr(request, " HTTP/"); // search for valid looking request
-    if(ptr == NULL) { // then this isn't valid HTTP
-        printf(" NOT HTTP!\n");
-    } else {
-        *ptr = 0; // terminate the buffer at the end of the URL
-        ptr = NULL; // set ptr to NULL (used to flag for an invalid request)
-        if(strncmp(request, "GET ", 4) == 0)  // get request
-            ptr = request+4; // ptr is the URL
-        if(strncmp(request, "HEAD ", 5) == 0) // head request
-            ptr = request+5; // ptr is the URL
-
-        if(ptr == NULL) { // then this is not a recognized request
-            printf("\tUNKNOWN REQUEST!\n");
-        } else { // valid request, with ptr pointing to the resource name
-            if (ptr[strlen(ptr) - 1] == '/')  // for resources ending with '/'
-                strcat(ptr, "index.html");     // add 'index.html' to the end
-            strcpy(resource, WEBROOT.c_str());     // begin resource with web root path
-            strcat(resource, ptr);         //  and join it with resource path
-            fd = open(resource, O_RDONLY, 0); // try to open the file
-            printf("\tOpening \'%s\'\t", resource);
-            if(fd == -1) { // if file is not found
-                printf(" 404 Not Found\n");
-                send_string(sockfd, "HTTP/1.0 404 NOT FOUND\r\n");
-                send_string(sockfd, "Server: Tiny webserver\r\n\r\n");
-                send_string(sockfd, "<html><head><title>404 Not Found</title></head>");
-                send_string(sockfd, "<body><h1>URL not found</h1></body></html>\r\n");
-            } else {      // otherwise, serve up the file
-                printf(" 200 OK\n");
-                send_string(sockfd, "HTTP/1.0 200 OK\r\n");
-                send_string(sockfd, "Server: Tiny webserver\r\n\r\n");
-                if(ptr == request + 4) { // then this is a GET request
-                    if( (length = get_file_size(fd)) == -1)
-                        REPORT_ERROR("getting resource file size");
-                    if( (ptr = (char *) malloc(length)) == NULL)
-                        REPORT_ERROR("allocating memory for reading resource");
-                    read(fd, ptr, length); // read the file into memory
-                    send(sockfd, ptr, length, 0);  // send it to socket
-                    free(ptr); // free file memory
-                }
-                close(fd); // close the file
-            } // end if block for file found/not found
-        } // end if block for valid request
-    } // end if block for valid HTTP
-    shutdown(sockfd, SHUT_RDWR); // close the socket gracefully
-    return 0;
-}
-
-*/
