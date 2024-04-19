@@ -9,6 +9,8 @@ int initLogger() {
     if (logFileFd == nullptr) {
         return -1;
     }
+
+    return 0;
 }
 
 int cleanupLogger() {
@@ -16,6 +18,8 @@ int cleanupLogger() {
         fclose(logFileFd);
         logFileFd = nullptr;
     }
+
+    return 0;
 }
 
 int logMessage(const char * format, ...) {
@@ -41,4 +45,6 @@ int logMessage(const char * format, ...) {
     va_end(valist);
     printf( "\n");
     fflush(stdout);
+
+    return 0;
 }
